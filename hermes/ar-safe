@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# ar-safe: run any command with a 30s timeout and ~8k-char output cap.
+# Usage: ar-safe <command...>   e.g. ar-safe agent-reach doctor
+#        ar-safe web <url> | ar-safe gh-readme <owner/repo>
+# Env: AR_TIMEOUT (default 30), AR_MAXCHARS (default 8000)
+set -u
+export PATH="/opt/agent-reach/venv/bin:$PATH"
+T="${AR_TIMEOUT:-30}"; MAX="${AR_MAXCHARS:-8000}"
+case "${1:-}" in
+  web)       shift; set -- curl -sL --max-time "$T" "https://r.jina.ai/$1" ;;
+  gh-readme) shift; set -- gh api "repos/$1/readme" -H "Accept: application/vnd.github.raw" ;;
+  "")        echo "usage: ar-safe <cmd...> | web <url> | gh-readme <owner/repo>" >&2; exit 2 ;;
+esac
+out=$(timeout --kill-after=2 "$T" "$@" 2>&1); rc=$?
+[ $rc -eq 124 ] && { printf '%s' "$out" | head -c "$MAX"; echo; echo "[ar-safe: timed out after ${T}s]"; exit 124; }
+n=${#out}
+printf '%s' "$out" | head -c "$MAX"; echo
+[ "$n" -gt "$MAX" ] && echo "[ar-safe: truncated, $n chars -> $MAX]"
+exit $rc
